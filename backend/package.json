@@ -4,9 +4,10 @@
   "description": "Backend for Yohan's Academic Dashboard",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
     "dev": "nodemon server.js",
-    "init-db": "node src/config/initDb.js"
+    "start": "node server.js",
+    "init-db": "node src/config/initDb.js",
+    "build": "npm install && npm run init-db"
   },
   "keywords": [
     "education",

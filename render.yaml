@@ -1,0 +1,30 @@
+services:
+  # Backend API
+  - type: web
+    name: school-dashboard-api
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install && npm run init-db
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_PATH
+        value: /opt/render/project/src/backend/database/school_dashboard.db
+
+  # Frontend React App
+  - type: web
+    name: school-dashboard-frontend
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://school-dashboard-api.onrender.com

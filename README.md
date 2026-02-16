@@ -2,7 +2,19 @@
 
 A comprehensive local academic dashboard for tracking student progress, assignments, tests, attendance, and more. Built for 3-4 users with basic authentication.
 
-## Tech Stack
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on deploying to Render.
+
+**Quick Deploy:**
+1. Push code to GitHub
+2. Sign up at [Render](https://render.com)
+3. Create new Blueprint and select your repository
+4. Render will auto-deploy both frontend and backend
+
+**Live Demo**: After deployment, your app will be at `https://school-dashboard-frontend.onrender.com`
+
+## Technologies Used
 
 ### Backend
 - **Runtime**: Node.js with Express
