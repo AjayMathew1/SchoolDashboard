@@ -1,0 +1,10 @@
+{
+    "install": "npm run install-all",
+    "start": "npm run init-db && npm run build-frontend && npm start",
+    "watch": {
+        "ignore": [
+            "frontend/",
+            "node_modules/"
+        ]
+    }
+}

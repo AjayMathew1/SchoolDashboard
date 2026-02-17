@@ -1,0 +1,25 @@
+{
+    "name": "school-dashboard",
+    "version": "1.0.0",
+    "description": "Academic Dashboard for tracking subjects, assignments, tests, and more",
+    "main": "backend/server.js",
+    "scripts": {
+        "start": "node backend/server.js",
+        "install-all": "cd backend && npm install && cd ../frontend && npm install",
+        "build-frontend": "cd frontend && npm install && npm run build",
+        "init-db": "node backend/src/config/initDb.js",
+        "setup": "npm run install-all && npm run init-db && npm run build-frontend",
+        "dev": "node backend/server.js"
+    },
+    "engines": {
+        "node": ">=18.x"
+    },
+    "keywords": [
+        "education",
+        "dashboard",
+        "academic",
+        "student"
+    ],
+    "author": "ajaymathew1",
+    "license": "MIT"
+}

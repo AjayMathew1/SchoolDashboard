@@ -4,15 +4,23 @@ A comprehensive local academic dashboard for tracking student progress, assignme
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on deploying to Render.
+### 🚀 Deploy to Glitch (Recommended - No Credit Card!)
 
-**Quick Deploy:**
-1. Push code to GitHub
-2. Sign up at [Render](https://render.com)
-3. Create new Blueprint and select your repository
-4. Render will auto-deploy both frontend and backend
+**Easiest deployment option** - free, no credit card required!
 
-**Live Demo**: After deployment, your app will be at `https://school-dashboard-frontend.onrender.com`
+See [DEPLOY_GLITCH.md](DEPLOY_GLITCH.md) for complete instructions.
+
+**Quick Start:**
+1. Go to https://glitch.com (sign up with GitHub)
+2. Create "New Project" → "Import from GitHub"
+3. Enter: `https://github.com/ajaymathew1/SchoolDashboard`
+4. Wait 5 minutes - done! 🎉
+
+**Your live app**: `https://your-project-name.glitch.me`
+
+### Alternative: Render
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for Render deployment (requires credit card verification).
 
 ## Technologies Used
 
