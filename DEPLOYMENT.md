@@ -1,148 +1,204 @@
-# Deployment Guide - Render
+# Deploying to Railway (Backend) + Vercel (Frontend)
 
-This guide will help you deploy the Academic Dashboard to Render for free.
+This is the recommended deployment for **3-4 non-technical users** who need:
+- ✅ Click a link and use the app
+- ✅ Persistent data (saved between visits)
+- ✅ Shared data (all users see same info)
+- ✅ Login protection (not public to the internet)
+- ✅ Free (no credit card required to start)
 
-## Prerequisites
+---
 
-- ✅ GitHub account with your code pushed
-- ✅ Render account (sign up at https://render.com)
+## Step 1: Customize User Accounts
 
-## Deployment Steps
+Before deploying, edit the user accounts in `backend/src/config/initDb.js`:
 
-### 1. Push Code to GitHub
+```js
+const USERS = [
+    {
+        email: 'admin@dashboard.local',   // ← Change this
+        password: 'admin123',              // ← Change this!
+        fullName: 'Administrator',
+        role: 'admin'
+    },
+    {
+        email: 'user1@dashboard.local',   // ← Change to real email
+        password: 'user1pass',             // ← Change this!
+        fullName: 'User One',              // ← Change to real name
+        role: 'student'
+    },
+    // ... add/remove users as needed
+];
+```
 
-Make sure your latest code is on GitHub:
+> ⚠️ **Important:** Use strong passwords! Anyone with these credentials can access the app.
+
+After editing, commit and push:
 ```bash
-cd /home/yoda/Developer/AIProjects/SchoolDashboard
 git add .
-git commit -m "Add Render deployment configuration"
+git commit -m "Customize user accounts"
 git push
 ```
 
-### 2. Deploy on Render
+---
 
-#### Option A: Using Blueprint (Recommended - Easiest)
+## Step 2: Deploy Backend to Railway
 
-1. Go to https://render.com/
-2. Click "Get Started for Free" (or login if you have an account)
-3. Connect your GitHub account
-4. Click "New" → "Blueprint"
-5. Select your `SchoolDashboard` repository
-6. Render will automatically detect the `render.yaml` file
-7. Click "Apply" to create both services
+### 2a. Create Railway Account
+1. Go to https://railway.app
+2. Click "Login" → "Login with GitHub"
+3. Authorize Railway to access your GitHub
 
-#### Option B: Manual Deployment
+### 2b. Create New Project
+1. Click **"New Project"**
+2. Select **"Deploy from GitHub repo"**
+3. Choose your `SchoolDashboard` repository
+4. Railway will detect the `backend/` folder
 
-**Deploy Backend:**
-1. Click "New" → "Web Service"
-2. Connect your GitHub repository
-3. Configure:
-   - Name: `school-dashboard-api`
-   - Environment: `Node`
-   - Build Command: `cd backend && npm install && npm run init-db`
-   - Start Command: `cd backend && npm start`
-   - Instance Type: `Free`
-4. Add Environment Variables:
-   - `NODE_ENV` = `production`
-   - `PORT` = `5000`
-   - `JWT_SECRET` = (auto-generate or use a random string)
-5. Click "Create Web Service"
+### 2c. Configure the Service
+1. Click on the service that was created
+2. Go to **"Settings"** tab
+3. Set **Root Directory** to: `backend`
+4. Set **Start Command** to: `npm run init-db && npm start`
 
-**Deploy Frontend:**
-1. Click "New" → "Static Site"
-2. Connect your GitHub repository
-3. Configure:
-   - Name: `school-dashboard-frontend`
-   - Build Command: `cd frontend && npm install && npm run build`
-   - Publish Directory: `frontend/dist`
-4. Add Environment Variable:
-   - `VITE_API_URL` = `https://school-dashboard-api.onrender.com/api` (use your actual backend URL)
-5. Click "Create Static Site"
+### 2d. Add Environment Variables
+Go to **"Variables"** tab and add:
 
-### 3. Wait for Deployment
+| Variable | Value |
+|---|---|
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | (click "Generate" for a random value) |
+| `FRONTEND_URL` | `*` (update this after Vercel deploy) |
 
-- Backend takes ~5-10 minutes for first deployment
-- Frontend takes ~3-5 minutes
-- Watch the build logs for any errors
+### 2e. Deploy
+1. Click **"Deploy"**
+2. Wait ~3 minutes for build to complete
+3. Copy your backend URL (looks like: `https://schooldashboard-production.up.railway.app`)
 
-### 4. Update Frontend API URL
+---
 
-After backend is deployed:
-1. Copy the backend URL (e.g., `https://school-dashboard-api.onrender.com`)
-2. Go to Frontend service settings → Environment
-3. Update `VITE_API_URL` to: `https://your-backend-url.onrender.com/api`
-4. Manual redeploy the frontend
+## Step 3: Deploy Frontend to Vercel
 
-### 5. Access Your App
+### 3a. Create Vercel Account
+1. Go to https://vercel.com
+2. Click "Sign Up" → "Continue with GitHub"
+3. Authorize Vercel
 
-Your app will be available at:
-- **Frontend**: `https://school-dashboard-frontend.onrender.com`
-- **Backend API**: `https://school-dashboard-api.onrender.com/api`
+### 3b. Import Project
+1. Click **"Add New"** → **"Project"**
+2. Find and select your `SchoolDashboard` repository
+3. Click **"Import"**
 
-Default login:
-- Email: `admin@dashboard.local`
-- Password: `admin123`
+### 3c. Configure Build Settings
+In the configuration screen:
 
-## Important Notes
+| Setting | Value |
+|---|---|
+| **Root Directory** | `frontend` |
+| **Framework Preset** | Vite |
+| **Build Command** | `npm run build` |
+| **Output Directory** | `dist` |
 
-### ⚠️ Free Tier Limitations
+### 3d. Add Environment Variable
+Under **"Environment Variables"**, add:
 
-1. **Data Persistence**: 
-   - Free tier uses ephemeral storage
-   - Database resets when service restarts (after 15 min of inactivity)
-   - For persistent data, upgrade to paid tier or migrate to PostgreSQL
+| Name | Value |
+|---|---|
+| `VITE_API_URL` | `https://your-railway-url.up.railway.app/api` |
 
-2. **Cold Starts**:
-   - Services sleep after 15 minutes of inactivity
-   - First request after sleep takes 30-60 seconds to wake up
+> Replace `your-railway-url` with the actual URL from Step 2e!
 
-3. **Build Time**:
-   - Free tier has limited build minutes per month
-   - Multiple deployments count toward this limit
+### 3e. Deploy
+1. Click **"Deploy"**
+2. Wait ~2 minutes
+3. Copy your Vercel URL (looks like: `https://school-dashboard.vercel.app`)
 
-### 🔄 Auto-Deployment
+---
 
-Render automatically redeploys when you push to GitHub:
+## Step 4: Update Railway CORS
+
+Now that you have your Vercel URL, update Railway:
+
+1. Go back to Railway → Your project → **Variables**
+2. Update `FRONTEND_URL` to your Vercel URL:
+   ```
+   https://school-dashboard.vercel.app
+   ```
+3. Railway will automatically redeploy
+
+---
+
+## Step 5: Test Everything
+
+1. Visit your Vercel URL
+2. Login with one of your user accounts
+3. Create a test entry (e.g., add a subject)
+4. Open a different browser or incognito window
+5. Login with a different user account
+6. Verify you can see the entry created in step 3 ✅
+
+---
+
+## Sharing with Your Users
+
+Send each user:
+- **App URL**: `https://your-app.vercel.app`
+- **Their email**: (what you set in initDb.js)
+- **Their password**: (what you set in initDb.js)
+
+Example message to send:
+```
+Hi! Here's your access to the Academic Dashboard:
+
+🔗 Link: https://your-app.vercel.app
+📧 Email: user1@dashboard.local
+🔑 Password: user1pass
+
+Just click the link and login. Let me know if you have any issues!
+```
+
+---
+
+## Future Updates
+
+When you make code changes:
 ```bash
 git add .
-git commit -m "Your update message"
+git commit -m "Your update description"
 git push
 ```
 
-### 🔒 Production Recommendations
+Both Railway and Vercel will **automatically redeploy** from GitHub! 🎉
 
-For production use, consider:
-1. Migrate SQLite → PostgreSQL (Render offers free 90-day trial)
-2. Change default admin credentials
-3. Set up proper JWT secret
-4. Enable HTTPS (Render does this automatically)
+---
 
 ## Troubleshooting
 
-### Build Fails
-- Check build logs in Render dashboard
-- Ensure all dependencies are in package.json
-- Verify Node version compatibility
+### "Network Error" on login
+- Check that `VITE_API_URL` in Vercel points to your Railway URL
+- Make sure it ends with `/api` (e.g., `https://xxx.railway.app/api`)
 
-### Frontend Can't Connect to Backend
-- Verify `VITE_API_URL` is set correctly in frontend environment
-- Check CORS settings in backend
-- Ensure backend URL ends with `/api`
+### Data not saving
+- Check Railway logs for errors
+- Ensure `NODE_ENV=production` is set in Railway variables
 
-### Database Not Initializing
-- Check backend build logs
-- Ensure `npm run init-db` runs during build
-- Verify database path is writable
+### CORS errors in browser console
+- Update `FRONTEND_URL` in Railway to match your exact Vercel URL
+- Redeploy Railway after changing variables
 
-## Cost
+### Railway free credit running out
+- Railway gives $5/month free credit
+- Light usage by 3-4 people should last the whole month
+- Monitor usage in Railway dashboard
 
-- **Free Forever**: Both services on free tier
-- **Optional Upgrades**:
-  - Paid tier ($7/month per service) for persistent storage
-  - PostgreSQL database (90-day free trial, then $7/month)
+---
 
-## Support
+## Cost Summary
 
-For issues:
-- Render Docs: https://render.com/docs
-- Render Community: https://community.render.com
+| Service | Cost |
+|---|---|
+| Vercel (Frontend) | **Free forever** |
+| Railway (Backend) | **$5 free credit/month** |
+| **Total** | **$0** for light usage |
+
+Railway's $5 credit is more than enough for 3-4 users with light usage. If you exceed it, Railway charges ~$0.000463/GB-hour which is very affordable.

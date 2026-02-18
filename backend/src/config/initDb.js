@@ -1,42 +1,72 @@
 const { db, initializeDatabase, generateUUID } = require('./database');
 const bcrypt = require('bcryptjs');
 
-// Initialize database and create default admin user
+// Define your users here - change names/emails/passwords as needed!
+const USERS = [
+    {
+        email: 'admin@dashboard.local',
+        password: 'admin123',
+        fullName: 'Administrator',
+        role: 'admin'
+    },
+    {
+        email: 'user1@dashboard.local',
+        password: 'user1pass',
+        fullName: 'User One',
+        role: 'student'
+    },
+    {
+        email: 'user2@dashboard.local',
+        password: 'user2pass',
+        fullName: 'User Two',
+        role: 'student'
+    },
+    {
+        email: 'user3@dashboard.local',
+        password: 'user3pass',
+        fullName: 'User Three',
+        role: 'student'
+    }
+];
+
+// Initialize database and create users
 async function init() {
     try {
         console.log('Initializing database...');
         initializeDatabase();
 
-        // Check if admin user exists
-        const admin = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
+        for (const user of USERS) {
+            // Check if user already exists
+            const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(user.email);
 
-        if (!admin) {
-            console.log('Creating default admin user...');
-            const hashedPassword = await bcrypt.hash('admin123', 10);
+            if (!existing) {
+                console.log(`Creating user: ${user.email}...`);
+                const hashedPassword = await bcrypt.hash(user.password, 10);
 
-            const stmt = db.prepare(`
-        INSERT INTO users (user_id, email, password_hash, full_name, role, is_active)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
+                db.prepare(`
+                    INSERT INTO users (user_id, email, password_hash, full_name, role, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(
+                    generateUUID(),
+                    user.email,
+                    hashedPassword,
+                    user.fullName,
+                    user.role,
+                    1
+                );
 
-            stmt.run(
-                generateUUID(),
-                'admin@dashboard.local',
-                hashedPassword,
-                'Administrator',
-                'admin',
-                1
-            );
-
-            console.log('Default admin user created!');
-            console.log('Email: admin@dashboard.local');
-            console.log('Password: admin123');
-            console.log('IMPORTANT: Please change this password after first login!');
-        } else {
-            console.log('Admin user already exists.');
+                console.log(`  ✓ Created: ${user.fullName} (${user.email})`);
+            } else {
+                console.log(`  - Already exists: ${user.email}`);
+            }
         }
 
-        console.log('\nDatabase initialization complete!');
+        console.log('\n✅ Database initialization complete!');
+        console.log('\nUser accounts:');
+        USERS.forEach(u => {
+            console.log(`  📧 ${u.email} | 🔑 ${u.password} | 👤 ${u.fullName}`);
+        });
+        console.log('\n⚠️  IMPORTANT: Change passwords after first login!');
         process.exit(0);
     } catch (error) {
         console.error('Error initializing database:', error);
