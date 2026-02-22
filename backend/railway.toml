@@ -1,6 +1,7 @@
 # Railway configuration for backend deployment
 [build]
 builder = "NIXPACKS"
+buildCommand = "npm install"
 
 [deploy]
 startCommand = "npm run init-db && npm start"
