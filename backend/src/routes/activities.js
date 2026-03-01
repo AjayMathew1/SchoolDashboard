@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 router.use(authMiddleware);
 
 // Get all activities
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const activities = db.prepare('SELECT * FROM activities ORDER BY start_date DESC').all();
-        res.json(activities);
+        const activitiesRes = await query('SELECT * FROM activities ORDER BY start_date DESC');
+        res.json(activitiesRes.rows);
     } catch (error) {
         console.error('Get activities error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -17,9 +17,10 @@ router.get('/', (req, res) => {
 });
 
 // Get single activity
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const activity = db.prepare('SELECT * FROM activities WHERE activity_id = ?').get(req.params.id);
+        const activityRes = await query('SELECT * FROM activities WHERE activity_id = $1', [req.params.id]);
+        const activity = activityRes.rows[0];
 
         if (!activity) {
             return res.status(404).json({ error: 'Activity not found' });
@@ -33,7 +34,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create activity
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const {
             activityName, activityType, startDate, endDate, durationHours,
@@ -46,19 +47,18 @@ router.post('/', (req, res) => {
 
         const activityId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO activities (
         activity_id, activity_name, activity_type, start_date, end_date,
         duration_hours, organizer, description, include_in_portfolio, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-        stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [
             activityId, activityName, activityType, startDate, endDate,
-            durationHours, organizer, description, includeInPortfolio ? 1 : 0, req.user.userId
-        );
+            durationHours, organizer, description, includeInPortfolio ? true : false, req.user.userId
+        ]);
 
-        const activity = db.prepare('SELECT * FROM activities WHERE activity_id = ?').get(activityId);
+        const activityRes = await query('SELECT * FROM activities WHERE activity_id = $1', [activityId]);
+        const activity = activityRes.rows[0];
 
         res.status(201).json(activity);
     } catch (error) {
@@ -68,29 +68,28 @@ router.post('/', (req, res) => {
 });
 
 // Update activity
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const {
             activityName, description, outcome, reflection
         } = req.body;
 
-        const stmt = db.prepare(`
+        const result = await query(`
       UPDATE activities SET
-        activity_name = COALESCE(?, activity_name),
-        description = COALESCE(?, description),
-        outcome = COALESCE(?, outcome),
-        reflection = COALESCE(?, reflection),
+        activity_name = COALESCE($1, activity_name),
+        description = COALESCE($2, description),
+        outcome = COALESCE($3, outcome),
+        reflection = COALESCE($4, reflection),
         updated_at = CURRENT_TIMESTAMP
-      WHERE activity_id = ?
-    `);
+      WHERE activity_id = $5
+    `, [activityName, description, outcome, reflection, req.params.id]);
 
-        const result = stmt.run(activityName, description, outcome, reflection, req.params.id);
-
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Activity not found' });
         }
 
-        const activity = db.prepare('SELECT * FROM activities WHERE activity_id = ?').get(req.params.id);
+        const activityRes = await query('SELECT * FROM activities WHERE activity_id = $1', [req.params.id]);
+        const activity = activityRes.rows[0];
 
         res.json(activity);
     } catch (error) {
@@ -100,11 +99,11 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete activity
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const result = db.prepare('DELETE FROM activities WHERE activity_id = ?').run(req.params.id);
+        const result = await query('DELETE FROM activities WHERE activity_id = $1', [req.params.id]);
 
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Activity not found' });
         }
 

@@ -1,4 +1,4 @@
-const { db, initializeDatabase, generateUUID } = require('./database');
+const { query, initializeDatabase, generateUUID } = require('./database');
 const bcrypt = require('bcryptjs');
 
 // Define your users here - change names/emails/passwords as needed!
@@ -33,27 +33,28 @@ const USERS = [
 async function init() {
     try {
         console.log('Initializing database...');
-        initializeDatabase();
+        await initializeDatabase();
 
         for (const user of USERS) {
             // Check if user already exists
-            const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(user.email);
+            const existingRes = await query('SELECT * FROM users WHERE email = $1', [user.email]);
+            const existing = existingRes.rows[0];
 
             if (!existing) {
                 console.log(`Creating user: ${user.email}...`);
                 const hashedPassword = await bcrypt.hash(user.password, 10);
 
-                db.prepare(`
+                await query(`
                     INSERT INTO users (user_id, email, password_hash, full_name, role, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                `, [
                     generateUUID(),
                     user.email,
                     hashedPassword,
                     user.fullName,
                     user.role,
-                    1
-                );
+                    true
+                ]);
 
                 console.log(`  ✓ Created: ${user.fullName} (${user.email})`);
             } else {

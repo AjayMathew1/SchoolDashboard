@@ -1,22 +1,33 @@
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite');
+// Create database connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/schooldashboard',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-// Create database connection
-const db = new Database(dbPath, { verbose: console.log });
-
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+// Utility to execute a query (similar to previous helper logic if we want, but pg uses async queries)
+async function query(text, params) {
+  const start = Date.now();
+  const res = await pool.query(text, params);
+  const duration = Date.now() - start;
+  // console.log('executed query', { text, duration, rows: res.rowCount });
+  return res;
+}
 
 // Initialize database with schema
-function initializeDatabase() {
+async function initializeDatabase() {
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   
-  db.exec(schema);
-  console.log('Database initialized successfully');
+  try {
+    await pool.query(schema);
+    console.log('Database initialized successfully');
+  } catch (err) {
+    console.error('Error initializing database:', err);
+  }
 }
 
 // Helper function to generate UUID
@@ -29,7 +40,8 @@ function generateUUID() {
 }
 
 module.exports = {
-  db,
+  db: pool,      // expose pool to be used directly or..
+  query,         // expose async query helper
   initializeDatabase,
   generateUUID
 };

@@ -1,22 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 router.use(authMiddleware);
 
 // Get all notes
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const notes = db.prepare(`
+        const notesRes = await query(`
       SELECT n.*, u.full_name as author_name
       FROM notes n
       LEFT JOIN users u ON n.created_by = u.user_id
-      WHERE n.visibility = 'All_Users' OR n.created_by = ?
+      WHERE n.visibility = 'All_Users' OR n.created_by = $1
       ORDER BY n.created_at DESC
-    `).all(req.user.userId);
+    `, [req.user.userId]);
 
-        res.json(notes);
+        res.json(notesRes.rows);
     } catch (error) {
         console.error('Get notes error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -24,9 +24,10 @@ router.get('/', (req, res) => {
 });
 
 // Get single note
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const note = db.prepare('SELECT * FROM notes WHERE note_id = ?').get(req.params.id);
+        const noteRes = await query('SELECT * FROM notes WHERE note_id = $1', [req.params.id]);
+        const note = noteRes.rows[0];
 
         if (!note) {
             return res.status(404).json({ error: 'Note not found' });
@@ -45,7 +46,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create note
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const {
             linkedModule, linkedEntityId, noteType, title, content, visibility
@@ -57,19 +58,18 @@ router.post('/', (req, res) => {
 
         const noteId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO notes (
         note_id, linked_module, linked_entity_id, note_type, title,
         content, visibility, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-        stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
             noteId, linkedModule, linkedEntityId, noteType, title,
             content, visibility || 'All_Users', req.user.userId
-        );
+        ]);
 
-        const note = db.prepare('SELECT * FROM notes WHERE note_id = ?').get(noteId);
+        const noteRes = await query('SELECT * FROM notes WHERE note_id = $1', [noteId]);
+        const note = noteRes.rows[0];
 
         res.status(201).json(note);
     } catch (error) {
@@ -79,12 +79,13 @@ router.post('/', (req, res) => {
 });
 
 // Update note
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const { title, content, followUpStatus } = req.body;
 
         // Check ownership
-        const note = db.prepare('SELECT * FROM notes WHERE note_id = ?').get(req.params.id);
+        const noteRes = await query('SELECT * FROM notes WHERE note_id = $1', [req.params.id]);
+        const note = noteRes.rows[0];
 
         if (!note) {
             return res.status(404).json({ error: 'Note not found' });
@@ -94,18 +95,17 @@ router.put('/:id', (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const stmt = db.prepare(`
+        await query(`
       UPDATE notes SET
-        title = COALESCE(?, title),
-        content = COALESCE(?, content),
-        follow_up_status = COALESCE(?, follow_up_status),
+        title = COALESCE($1, title),
+        content = COALESCE($2, content),
+        follow_up_status = COALESCE($3, follow_up_status),
         updated_at = CURRENT_TIMESTAMP
-      WHERE note_id = ?
-    `);
+      WHERE note_id = $4
+    `, [title, content, followUpStatus, req.params.id]);
 
-        stmt.run(title, content, followUpStatus, req.params.id);
-
-        const updatedNote = db.prepare('SELECT * FROM notes WHERE note_id = ?').get(req.params.id);
+        const updatedNoteRes = await query('SELECT * FROM notes WHERE note_id = $1', [req.params.id]);
+        const updatedNote = updatedNoteRes.rows[0];
 
         res.json(updatedNote);
     } catch (error) {
@@ -115,9 +115,10 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete note
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const note = db.prepare('SELECT * FROM notes WHERE note_id = ?').get(req.params.id);
+        const noteRes = await query('SELECT * FROM notes WHERE note_id = $1', [req.params.id]);
+        const note = noteRes.rows[0];
 
         if (!note) {
             return res.status(404).json({ error: 'Note not found' });
@@ -127,7 +128,7 @@ router.delete('/:id', (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        db.prepare('DELETE FROM notes WHERE note_id = ?').run(req.params.id);
+        await query('DELETE FROM notes WHERE note_id = $1', [req.params.id]);
 
         res.json({ message: 'Note deleted successfully' });
     } catch (error) {

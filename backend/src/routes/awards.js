@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 router.use(authMiddleware);
 
 // Get all awards
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const awards = db.prepare('SELECT * FROM awards ORDER BY date_received DESC').all();
-        res.json(awards);
+        const awardsRes = await query('SELECT * FROM awards ORDER BY date_received DESC');
+        res.json(awardsRes.rows);
     } catch (error) {
         console.error('Get awards error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -17,9 +17,10 @@ router.get('/', (req, res) => {
 });
 
 // Get single award
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const award = db.prepare('SELECT * FROM awards WHERE award_id = ?').get(req.params.id);
+        const awardRes = await query('SELECT * FROM awards WHERE award_id = $1', [req.params.id]);
+        const award = awardRes.rows[0];
 
         if (!award) {
             return res.status(404).json({ error: 'Award not found' });
@@ -33,7 +34,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create award
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const {
             title, awardCategory, awardLevel, issuingAuthority, dateReceived,
@@ -46,19 +47,18 @@ router.post('/', (req, res) => {
 
         const awardId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO awards (
         award_id, title, award_category, award_level, issuing_authority,
         date_received, description, include_in_portfolio, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-        stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
             awardId, title, awardCategory, awardLevel, issuingAuthority,
-            dateReceived, description, includeInPortfolio ? 1 : 0, req.user.userId
-        );
+            dateReceived, description, includeInPortfolio ? true : false, req.user.userId
+        ]);
 
-        const award = db.prepare('SELECT * FROM awards WHERE award_id = ?').get(awardId);
+        const awardRes = await query('SELECT * FROM awards WHERE award_id = $1', [awardId]);
+        const award = awardRes.rows[0];
 
         res.status(201).json(award);
     } catch (error) {
@@ -68,29 +68,28 @@ router.post('/', (req, res) => {
 });
 
 // Update award
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const {
             title, description, achievementDetails, appreciations
         } = req.body;
 
-        const stmt = db.prepare(`
+        const result = await query(`
       UPDATE awards SET
-        title = COALESCE(?, title),
-        description = COALESCE(?, description),
-        achievement_details = COALESCE(?, achievement_details),
-        appreciations = COALESCE(?, appreciations),
+        title = COALESCE($1, title),
+        description = COALESCE($2, description),
+        achievement_details = COALESCE($3, achievement_details),
+        appreciations = COALESCE($4, appreciations),
         updated_at = CURRENT_TIMESTAMP
-      WHERE award_id = ?
-    `);
+      WHERE award_id = $5
+    `, [title, description, achievementDetails, appreciations, req.params.id]);
 
-        const result = stmt.run(title, description, achievementDetails, appreciations, req.params.id);
-
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Award not found' });
         }
 
-        const award = db.prepare('SELECT * FROM awards WHERE award_id = ?').get(req.params.id);
+        const awardRes = await query('SELECT * FROM awards WHERE award_id = $1', [req.params.id]);
+        const award = awardRes.rows[0];
 
         res.json(award);
     } catch (error) {
@@ -100,11 +99,11 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete award
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const result = db.prepare('DELETE FROM awards WHERE award_id = ?').run(req.params.id);
+        const result = await query('DELETE FROM awards WHERE award_id = $1', [req.params.id]);
 
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Award not found' });
         }
 

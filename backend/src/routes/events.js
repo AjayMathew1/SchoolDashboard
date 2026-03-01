@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 router.use(authMiddleware);
 
 // Get all events
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const events = db.prepare('SELECT * FROM events ORDER BY start_date DESC').all();
-        res.json(events);
+        const eventsRes = await query('SELECT * FROM events ORDER BY start_date DESC');
+        res.json(eventsRes.rows);
     } catch (error) {
         console.error('Get events error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -17,9 +17,10 @@ router.get('/', (req, res) => {
 });
 
 // Get single event
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const event = db.prepare('SELECT * FROM events WHERE event_id = ?').get(req.params.id);
+        const eventRes = await query('SELECT * FROM events WHERE event_id = $1', [req.params.id]);
+        const event = eventRes.rows[0];
 
         if (!event) {
             return res.status(404).json({ error: 'Event not found' });
@@ -33,7 +34,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create event
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const {
             eventName, eventType, startDate, endDate, location, organizer,
@@ -46,21 +47,20 @@ router.post('/', (req, res) => {
 
         const eventId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO events (
         event_id, event_name, event_type, start_date, end_date, location,
         organizer, description, participation_level, role_description,
         include_in_portfolio, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-        stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, [
             eventId, eventName, eventType, startDate, endDate, location,
             organizer, description, participationLevel, roleDescription,
-            includeInPortfolio ? 1 : 0, req.user.userId
-        );
+            includeInPortfolio ? true : false, req.user.userId
+        ]);
 
-        const event = db.prepare('SELECT * FROM events WHERE event_id = ?').get(eventId);
+        const eventRes = await query('SELECT * FROM events WHERE event_id = $1', [eventId]);
+        const event = eventRes.rows[0];
 
         res.status(201).json(event);
     } catch (error) {
@@ -70,30 +70,29 @@ router.post('/', (req, res) => {
 });
 
 // Update event
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const {
             eventName, startDate, participationLevel, roleDescription, reflection
         } = req.body;
 
-        const stmt = db.prepare(`
+        const result = await query(`
       UPDATE events SET
-        event_name = COALESCE(?, event_name),
-        start_date = COALESCE(?, start_date),
-        participation_level = COALESCE(?, participation_level),
-        role_description = COALESCE(?, role_description),
-        reflection = COALESCE(?, reflection),
+        event_name = COALESCE($1, event_name),
+        start_date = COALESCE($2, start_date),
+        participation_level = COALESCE($3, participation_level),
+        role_description = COALESCE($4, role_description),
+        reflection = COALESCE($5, reflection),
         updated_at = CURRENT_TIMESTAMP
-      WHERE event_id = ?
-    `);
+      WHERE event_id = $6
+    `, [eventName, startDate, participationLevel, roleDescription, reflection, req.params.id]);
 
-        const result = stmt.run(eventName, startDate, participationLevel, roleDescription, reflection, req.params.id);
-
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Event not found' });
         }
 
-        const event = db.prepare('SELECT * FROM events WHERE event_id = ?').get(req.params.id);
+        const eventRes = await query('SELECT * FROM events WHERE event_id = $1', [req.params.id]);
+        const event = eventRes.rows[0];
 
         res.json(event);
     } catch (error) {
@@ -103,11 +102,11 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete event
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const result = db.prepare('DELETE FROM events WHERE event_id = ?').run(req.params.id);
+        const result = await query('DELETE FROM events WHERE event_id = $1', [req.params.id]);
 
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Event not found' });
         }
 

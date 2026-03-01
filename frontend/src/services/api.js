@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Use environment variable for API URL
-// In production (Glitch), use relative path since frontend and backend are served together
+// In production, use VITE_API_URL. In development, default to localhost:5000/api
 const API_BASE_URL = import.meta.env.VITE_API_URL ||
     (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
 

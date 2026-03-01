@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 // Login
@@ -14,7 +14,8 @@ router.post('/login', async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const user = db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').get(email);
+        const userRes = await query('SELECT * FROM users WHERE email = $1 AND is_active = true', [email]);
+        const user = userRes.rows[0];
 
         if (!user) {
             return res.status(401).json({ error: 'Invalid credentials' });
@@ -27,7 +28,7 @@ router.post('/login', async (req, res) => {
         }
 
         // Update last login
-        db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?').run(user.user_id);
+        await query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1', [user.user_id]);
 
         const token = jwt.sign(
             {
@@ -71,7 +72,8 @@ router.post('/register', authMiddleware, async (req, res) => {
         }
 
         // Check if user already exists
-        const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+        const existingUserRes = await query('SELECT * FROM users WHERE email = $1', [email]);
+        const existingUser = existingUserRes.rows[0];
 
         if (existingUser) {
             return res.status(400).json({ error: 'User with this email already exists' });
@@ -80,12 +82,10 @@ router.post('/register', authMiddleware, async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const userId = generateUUID();
 
-        const stmt = db.prepare(`
-      INSERT INTO users (user_id, email, password_hash, full_name, role, is_active)
-      VALUES (?, ?, ?, ?, ?, 1)
-    `);
-
-        stmt.run(userId, email, hashedPassword, fullName, role);
+        await query(`
+            INSERT INTO users (user_id, email, password_hash, full_name, role, is_active)
+            VALUES ($1, $2, $3, $4, $5, true)
+        `, [userId, email, hashedPassword, fullName, role]);
 
         res.status(201).json({
             message: 'User created successfully',
@@ -103,10 +103,13 @@ router.post('/register', authMiddleware, async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
     try {
-        const user = db.prepare('SELECT user_id, email, full_name, role, avatar_url FROM users WHERE user_id = ?')
-            .get(req.user.userId);
+        const userRes = await query(
+            'SELECT user_id, email, full_name, role, avatar_url FROM users WHERE user_id = $1',
+            [req.user.userId]
+        );
+        const user = userRes.rows[0];
 
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -134,7 +137,12 @@ router.post('/change-password', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Current password and new password are required' });
         }
 
-        const user = db.prepare('SELECT * FROM users WHERE user_id = ?').get(req.user.userId);
+        const userRes = await query('SELECT * FROM users WHERE user_id = $1', [req.user.userId]);
+        const user = userRes.rows[0];
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
 
         const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
 
@@ -144,8 +152,10 @@ router.post('/change-password', authMiddleware, async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
-            .run(hashedPassword, req.user.userId);
+        await query(
+            'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
+            [hashedPassword, req.user.userId]
+        );
 
         res.json({ message: 'Password changed successfully' });
     } catch (error) {

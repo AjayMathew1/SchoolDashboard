@@ -1,23 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { db, generateUUID } = require('../config/database');
+const { query, generateUUID } = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
 // Get all subjects
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const subjects = db.prepare(`
+        const subjectsRes = await query(`
       SELECT 
         s.*,
         (SELECT COUNT(*) FROM topics WHERE subject_id = s.subject_id) as total_topics,
         (SELECT COUNT(*) FROM topics WHERE subject_id = s.subject_id AND completion_status = 'Completed') as completed_topics
       FROM subjects s
-      WHERE s.is_active = 1
+      WHERE s.is_active = true
       ORDER BY s.subject_name
-    `).all();
+    `);
+        const subjects = subjectsRes.rows;
 
         res.json(subjects);
     } catch (error) {
@@ -27,19 +28,22 @@ router.get('/', (req, res) => {
 });
 
 // Get single subject
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const subject = db.prepare('SELECT * FROM subjects WHERE subject_id = ?').get(req.params.id);
+        const subjectRes = await query('SELECT * FROM subjects WHERE subject_id = $1', [req.params.id]);
+        const subject = subjectRes.rows[0];
 
         if (!subject) {
             return res.status(404).json({ error: 'Subject not found' });
         }
 
         // Get books
-        const books = db.prepare('SELECT * FROM books WHERE subject_id = ?').all(req.params.id);
+        const booksRes = await query('SELECT * FROM books WHERE subject_id = $1', [req.params.id]);
+        const books = booksRes.rows;
 
         // Get topics
-        const topics = db.prepare('SELECT * FROM topics WHERE subject_id = ? ORDER BY chapter_number, topic_order').all(req.params.id);
+        const topicsRes = await query('SELECT * FROM topics WHERE subject_id = $1 ORDER BY chapter_number, topic_order', [req.params.id]);
+        const topics = topicsRes.rows;
 
         res.json({
             ...subject,
@@ -53,7 +57,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create subject
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const {
             subjectName, subjectCode, subjectType, examBoard,
@@ -66,19 +70,18 @@ router.post('/', (req, res) => {
 
         const subjectId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO subjects (
         subject_id, subject_name, subject_code, subject_type, exam_board,
         target_grade, predicted_grade, color_code, description, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-        stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [
             subjectId, subjectName, subjectCode, subjectType, examBoard,
             targetGrade, predictedGrade, colorCode, description, req.user.userId
-        );
+        ]);
 
-        const subject = db.prepare('SELECT * FROM subjects WHERE subject_id = ?').get(subjectId);
+        const subjectRes = await query('SELECT * FROM subjects WHERE subject_id = $1', [subjectId]);
+        const subject = subjectRes.rows[0];
 
         res.status(201).json(subject);
     } catch (error) {
@@ -88,31 +91,30 @@ router.post('/', (req, res) => {
 });
 
 // Update subject
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const {
             subjectName, subjectCode, subjectType, examBoard,
             targetGrade, predictedGrade, colorCode, description
         } = req.body;
 
-        const stmt = db.prepare(`
+        const result = await query(`
       UPDATE subjects SET
-        subject_name = ?, subject_code = ?, subject_type = ?, exam_board = ?,
-        target_grade = ?, predicted_grade = ?, color_code = ?, description = ?,
+        subject_name = $1, subject_code = $2, subject_type = $3, exam_board = $4,
+        target_grade = $5, predicted_grade = $6, color_code = $7, description = $8,
         updated_at = CURRENT_TIMESTAMP
-      WHERE subject_id = ?
-    `);
-
-        const result = stmt.run(
+      WHERE subject_id = $9
+    `, [
             subjectName, subjectCode, subjectType, examBoard,
             targetGrade, predictedGrade, colorCode, description, req.params.id
-        );
+        ]);
 
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Subject not found' });
         }
 
-        const subject = db.prepare('SELECT * FROM subjects WHERE subject_id = ?').get(req.params.id);
+        const subjectRes = await query('SELECT * FROM subjects WHERE subject_id = $1', [req.params.id]);
+        const subject = subjectRes.rows[0];
 
         res.json(subject);
     } catch (error) {
@@ -122,16 +124,16 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete subject
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         // Only admins can delete
         if (req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Only admins can delete subjects' });
         }
 
-        const result = db.prepare('UPDATE subjects SET is_active = 0 WHERE subject_id = ?').run(req.params.id);
+        const result = await query('UPDATE subjects SET is_active = false WHERE subject_id = $1', [req.params.id]);
 
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Subject not found' });
         }
 
@@ -143,7 +145,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // Topics endpoints
-router.post('/:subjectId/topics', (req, res) => {
+router.post('/:subjectId/topics', async (req, res) => {
     try {
         const { topicName, chapterNumber, chapterName, difficultyLevel, weightagePercentage } = req.body;
 
@@ -153,16 +155,15 @@ router.post('/:subjectId/topics', (req, res) => {
 
         const topicId = generateUUID();
 
-        const stmt = db.prepare(`
+        await query(`
       INSERT INTO topics (
         topic_id, subject_id, topic_name, chapter_number, chapter_name,
         difficulty_level, weightage_percentage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [topicId, req.params.subjectId, topicName, chapterNumber, chapterName, difficultyLevel, weightagePercentage]);
 
-        stmt.run(topicId, req.params.subjectId, topicName, chapterNumber, chapterName, difficultyLevel, weightagePercentage);
-
-        const topic = db.prepare('SELECT * FROM topics WHERE topic_id = ?').get(topicId);
+        const topicRes = await query('SELECT * FROM topics WHERE topic_id = $1', [topicId]);
+        const topic = topicRes.rows[0];
 
         res.status(201).json(topic);
     } catch (error) {
@@ -171,27 +172,26 @@ router.post('/:subjectId/topics', (req, res) => {
     }
 });
 
-router.put('/topics/:topicId', (req, res) => {
+router.put('/topics/:topicId', async (req, res) => {
     try {
         const { topicName, completionStatus, dateCovered, personalNotes } = req.body;
 
-        const stmt = db.prepare(`
+        const result = await query(`
       UPDATE topics SET
-        topic_name = COALESCE(?, topic_name),
-        completion_status = COALESCE(?, completion_status),
-        date_covered = COALESCE(?, date_covered),
-        personal_notes = COALESCE(?, personal_notes),
+        topic_name = COALESCE($1, topic_name),
+        completion_status = COALESCE($2, completion_status),
+        date_covered = COALESCE($3, date_covered),
+        personal_notes = COALESCE($4, personal_notes),
         updated_at = CURRENT_TIMESTAMP
-      WHERE topic_id = ?
-    `);
+      WHERE topic_id = $5
+    `, [topicName, completionStatus, dateCovered, personalNotes, req.params.topicId]);
 
-        const result = stmt.run(topicName, completionStatus, dateCovered, personalNotes, req.params.topicId);
-
-        if (result.changes === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Topic not found' });
         }
 
-        const topic = db.prepare('SELECT * FROM topics WHERE topic_id = ?').get(req.params.topicId);
+        const topicRes = await query('SELECT * FROM topics WHERE topic_id = $1', [req.params.topicId]);
+        const topic = topicRes.rows[0];
 
         res.json(topic);
     } catch (error) {
